@@ -64,10 +64,10 @@ export class AwsCostReportStack extends cdk.Stack {
       loggingFormat: lambda.LoggingFormat.JSON,
     });
 
-    // 毎日朝9時に通知を出す
+    // 毎日朝9時10分に通知を出す
     // See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html
     const rule = new events.Rule(this, "CostReportRule", {
-      schedule: events.Schedule.expression("cron(0 0 * * ? *)"),
+      schedule: events.Schedule.expression("cron(10 0 * * ? *)"),
     });
 
     rule.addTarget(new targets.LambdaFunction(lambdaFn));
