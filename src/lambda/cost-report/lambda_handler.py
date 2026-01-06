@@ -400,22 +400,32 @@ def get_azure_cost_data(dates: dict, scope: str) -> float:
     """
     指定された日付範囲のAzureコストデータ（USD）を取得する（REST API）
     """
-    try:
-        usage = get_azure_cost_usage(dates["start_date"], dates["today"], scope)
+    
+    max_retries = 3
+    wait_seconds = 30
+    for attempt in range(1, max_retries + 1):
+        try:
+            usage = get_azure_cost_usage(dates["start_date"], dates["today"], scope)
 
-        # REST APIのレスポンス形式に合わせて抽出
-        rows = usage.get("properties", {}).get("rows", [])
-        if not rows or not rows[0]:
-            logger.warning("No cost data returned from Azure usage API")
-            return 0.0
-        #AzureのAPIはコストをJPYで取得
-        total_cost_jpy = int(rows[0][0])
-        logger.info(f"Azure usage rows: {rows}")
-        return total_cost_jpy
+            # REST APIのレスポンス形式に合わせて抽出
+            rows = usage.get("properties", {}).get("rows", [])
+            if not rows or not rows[0]:
+                logger.warning("No cost data returned from Azure usage API")
+                return 0.0
+            #AzureのAPIはコストをJPYで取得
+            total_cost_jpy = int(rows[0][0])
+            logger.info(f"Azure usage rows: {rows}")
+            return total_cost_jpy
 
-    except Exception as error:
-        logger.error(f"Failed to get Azure cost data: {error}")
-        raise
+        except Exception as error:
+            logger.error(f"Failed to get Azure cost data: {error}")
+            if attempt < max_retries:
+                logger.info(f"Retrying in {wait_seconds} seconds... (Attempt {attempt}/{max_retries})")
+                time.sleep(wait_seconds)
+            else:
+                logger.error("Max retries reached. Unable to get Azure cost data.")
+            raise
+        
 
 
 def get_azure_forecast_data(dates: dict, total_cost_jpy: float, scope: str) -> float:
@@ -423,28 +433,38 @@ def get_azure_forecast_data(dates: dict, total_cost_jpy: float, scope: str) -> f
     Azureのコスト予測データを取得する（REST API）
     月初日の場合は、総コストをそのまま予測値として使用する。
     """
-
+    
+    
     if dates.get("is_first_day"):
         logger.info("First day of the month, using total cost as forecast for Azure")
         return total_cost_jpy
     else:
-        try:
-            forecast_response = get_azure_cost_forecast(
-                dates["today"], dates["start_of_next_month"], scope
-            )
+        max_retries = 3
+        wait_seconds = 30
+        for attempt in range(1, max_retries + 1):
+            try:
+                forecast_response = get_azure_cost_forecast(
+                    dates["today"], dates["start_of_next_month"], scope
+                )
 
-            rows = forecast_response.get("properties", {}).get("rows", [])
-            if not rows or not rows[0]:
-                logger.warning("No forecast data returned from Azure forecast API")
-                return 0.0
+                rows = forecast_response.get("properties", {}).get("rows", [])
+                if not rows or not rows[0]:
+                    logger.warning("No forecast data returned from Azure forecast API")
+                    return 0.0
 
-            forecast_cost_jpy = int(rows[0][0])
-            logger.info(f"Azure forecast rows: {rows}")
-            return forecast_cost_jpy
+                forecast_cost_jpy = int(rows[0][0])
+                logger.info(f"Azure forecast rows: {rows}")
+                return forecast_cost_jpy
 
-        except Exception as error:
-            logger.error(f"Failed to get Azure forecast data: {error}")
-            raise
+            except Exception as error:
+                logger.error(f"Failed to get Azure forecast data: {error}")
+
+                if attempt < max_retries:
+                    logger.info(f"Retrying in {wait_seconds} seconds... (Attempt {attempt}/{max_retries})")
+                    time.sleep(wait_seconds)
+                else:
+                    logger.error("Max retries reached. Unable to get Azure forecast data.")
+                    raise
 
 def get_aws_forecast_data(dates: Dates, total_cost_usd: float) -> float:
     """
